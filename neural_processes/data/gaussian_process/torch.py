@@ -1,15 +1,11 @@
 """A PyTorch translation of Deepmind's gaussian process curve generator
 see https://github.com/deepmind/neural-processes/blob/master/attentive_neural_process.ipynb
 """
-import collections
 import torch
-
-NPRegressionDescription = collections.namedtuple(
-    "NPRegressionDescription", ("query", "target_y", "num_total_points", "num_context_points")
-)
+from torch.utils import data
 
 
-class CurveGenerator:
+class CurveGenerator(data.IterableDataset):
     def __init__(
         self,
         batch_size,
@@ -139,14 +135,14 @@ class CurveGenerator:
         # [batch_size, num_total_points, y_size]
         return y_values.permute((0, 2, 1))
 
-    def generate_curves(self):
+    def generate_batch(self):
         """Builds the op delivering the data.
 
-    Generated functions are `float32` with x values between -2 and 2.
+        Generated functions are `float32` with x values between -2 and 2.
 
-    Returns:
-      A `NPRegressionDescription` namedtuple.
-    """
+        Returns:
+            A tuple (context_x, context_y, target_x, target_y)
+        """
         num_context = torch.randint(size=(), low=3, high=self._max_num_context + 1)
 
         if self._testing:
@@ -184,11 +180,10 @@ class CurveGenerator:
             context_x = x_values[:, :num_context, :]  # type: ignore
             context_y = y_values[:, :num_context, :]  # type: ignore
 
-        query = ((context_x, context_y), target_x)
+        return context_x, context_y, target_x, target_y
 
-        return NPRegressionDescription(
-            query=query,
-            target_y=target_y,
-            num_total_points=target_x.shape[1],
-            num_context_points=num_context,
-        )
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return self.generate_batch()
