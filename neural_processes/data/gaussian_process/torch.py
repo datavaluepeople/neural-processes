@@ -88,7 +88,7 @@ class CurveGenerator(data.IterableDataset):
 
     def get_train_x_values(self, num_context):
         """Select a random number of x-positions at random for training."""
-        num_target = torch.randint(size=(), low=0, high=self._max_num_context + 1 - num_context)
+        num_target = torch.randint(size=(), low=1, high=self._max_num_context + 2 - num_context)
         num_total_points = num_context + num_target
         low = -2
         high = 2
