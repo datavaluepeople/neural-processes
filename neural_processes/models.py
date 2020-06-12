@@ -72,7 +72,8 @@ class NP(tl.LightningModule):
         prior = self.encoder.forward(context_x, context_y)
         posterior = self.encoder.forward(target_x, target_y)
 
+        len_seq = target_x.size()[1]
         kl = torch.distributions.kl_divergence(posterior, prior).sum(dim=-1)
 
-        elbo = dist.log_prob(target_y.squeeze(-1)).sum(dim=-1) - kl
+        elbo = dist.log_prob(target_y.squeeze(-1)).sum(dim=-1) - kl * len_seq
         return {"loss": - elbo.mean()}
