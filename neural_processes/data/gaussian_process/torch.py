@@ -71,7 +71,7 @@ class CurveGenerator(data.IterableDataset):
         norm = norm.sum(dim=-1)  # [B, data_size, num_total_points, num_total_points]
 
         # [B, y_size, num_total_points, num_total_points]
-        kernel = torch.square(sigma_f)[:, :, None, None] * torch.exp(-0.5 * norm)
+        kernel = sigma_f[:, :, None, None] * torch.exp(-0.5 * norm)
 
         # Add some noise to the diagonal to make the cholesky work.
         kernel += (sigma_noise ** 2) * torch.eye(num_total_points)
