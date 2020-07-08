@@ -1,4 +1,5 @@
 import pytorch_lightning as tl
+from pytorch_lightning.core.decorators import auto_move_data
 import torch
 
 
@@ -9,6 +10,7 @@ class CNP(tl.LightningModule):
         self.decoder = decoder
         self.train_loader = train_loader
 
+    @auto_move_data
     def forward(self, context_x, context_y, target_x):
         r = self.encoder(context_x, context_y)
         mu, sigma = self.decoder(target_x, r)
@@ -31,13 +33,15 @@ class CNP(tl.LightningModule):
 
 
 class NP(tl.LightningModule):
-    def __init__(self, encoder, decoder, train_loader, fixed_sigma=None):
+    def __init__(self, encoder, decoder, train_loader, fixed_sigma=None, scale_kl=True):
         super().__init__()
         self.encoder = encoder
         self.decoder = decoder
         self.train_loader = train_loader
         self.fixed_sigma = fixed_sigma
+        self.scale_kl = scale_kl
 
+    @auto_move_data
     def forward(self, context_x, context_y, target_x, target_y=None, use_mean_latent=True):
         # At train time, we infer with both context and targets
         # (and here target_x/y contains both the context and the targets)
@@ -64,16 +68,24 @@ class NP(tl.LightningModule):
         )
 
         if self.fixed_sigma is None:
-            mu, sigma = out
+            mu, sigma = out # each (batch_size, n_targets, 1)
         else:
-            mu, sigma = out, torch.full_like(out, self.fixed_sigma)
-        dist = torch.distributions.Normal(mu, sigma)
+            # decoder can output either only mu (here) or mu and sigma (above) depending on output_sizes kwarg
+            mu, sigma = out, torch.full_like(out, self.fixed_sigma) # each (batch_size, n_targets, 1)
+
+        dist = torch.distributions.Normal(mu, sigma) 
 
         prior = self.encoder.forward(context_x, context_y)
         posterior = self.encoder.forward(target_x, target_y)
 
-        len_seq = target_x.size()[1]
+        batch_size, len_seq, _ = target_x.size()
         kl = torch.distributions.kl_divergence(posterior, prior).sum(dim=-1)
 
-        elbo = dist.log_prob(target_y.squeeze(-1)).sum(dim=-1) - kl * len_seq
-        return {"loss": - elbo.mean()}
+        ll = dist.log_prob(target_y.squeeze(-1)).sum(dim=-1)
+        elbo = ll - kl * len_seq if self.scale_kl else ll - kl
+        nelbo = - elbo.mean()
+
+        metrics = {'nelbo': nelbo, 'kl': kl.mean(), 'nll': -ll.mean(), 'batch_size': batch_size, 'sigma_output': sigma.mean()}
+        output_dict = {"loss": nelbo, "log": metrics} # the "log" version of the metrics dict will be passed to the logger (e.g. tensorboard);
+        output_dict.update(metrics) # also add all metrics to output dict, which will mean they are accessible as callback_metrics 
+        return output_dict
