@@ -33,13 +33,12 @@ class CNP(tl.LightningModule):
 
 
 class NP(tl.LightningModule):
-    def __init__(self, encoder, decoder, train_loader, fixed_sigma=None, scale_kl=True):
+    def __init__(self, encoder, decoder, train_loader, fixed_sigma=None):
         super().__init__()
         self.encoder = encoder
         self.decoder = decoder
         self.train_loader = train_loader
         self.fixed_sigma = fixed_sigma
-        self.scale_kl = scale_kl
 
     @auto_move_data
     def forward(self, context_x, context_y, target_x, target_y=None, use_mean_latent=True):
@@ -68,12 +67,12 @@ class NP(tl.LightningModule):
         )
 
         if self.fixed_sigma is None:
-            mu, sigma = out # each (batch_size, n_targets, 1)
+            mu, sigma = out  # each (batch_size, n_targets, 1)
         else:
-            # decoder can output either only mu (here) or mu and sigma (above) depending on output_sizes kwarg
-            mu, sigma = out, torch.full_like(out, self.fixed_sigma) # each (batch_size, n_targets, 1)
+            # decoder outputs only mu (here) or mu and sigma (above) depending on output_sizes
+            mu, sigma = out, torch.full_like(out, self.fixed_sigma)  # (batch_size, n_targets, 1)
 
-        dist = torch.distributions.Normal(mu, sigma) 
+        dist = torch.distributions.Normal(mu, sigma)
 
         prior = self.encoder.forward(context_x, context_y)
         posterior = self.encoder.forward(target_x, target_y)
@@ -82,10 +81,11 @@ class NP(tl.LightningModule):
         kl = torch.distributions.kl_divergence(posterior, prior).sum(dim=-1)
 
         ll = dist.log_prob(target_y.squeeze(-1)).sum(dim=-1)
-        elbo = ll - kl * len_seq if self.scale_kl else ll - kl
+        elbo = ll - kl * len_seq
         nelbo = - elbo.mean()
 
-        metrics = {'nelbo': nelbo, 'kl': kl.mean(), 'nll': -ll.mean(), 'batch_size': batch_size, 'sigma_output': sigma.mean()}
-        output_dict = {"loss": nelbo, "log": metrics} # the "log" version of the metrics dict will be passed to the logger (e.g. tensorboard);
-        output_dict.update(metrics) # also add all metrics to output dict, which will mean they are accessible as callback_metrics 
+        metrics = {'nelbo': nelbo, 'kl': kl.mean(), 'nll': -ll.mean(),
+                   'batch_size': batch_size, 'sigma_output': sigma.mean()}
+        output_dict = {"loss": nelbo, "log": metrics}
+        output_dict.update(metrics)  # also include metrics in output dict for access in callbacks
         return output_dict
