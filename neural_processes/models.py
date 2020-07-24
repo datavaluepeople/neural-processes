@@ -77,15 +77,14 @@ class NP(tl.LightningModule):
         prior = self.encoder.forward(context_x, context_y)
         posterior = self.encoder.forward(target_x, target_y)
 
-        batch_size, len_seq, _ = target_x.size()
+        len_seq = target_x.size()[1]
         kl = torch.distributions.kl_divergence(posterior, prior).sum(dim=-1)
-
         ll = dist.log_prob(target_y.squeeze(-1)).sum(dim=-1)
-        elbo = ll - kl * len_seq
-        nelbo = - elbo.mean()
 
-        metrics = {'nelbo': nelbo, 'kl': kl.mean(), 'nll': -ll.mean(),
-                   'batch_size': batch_size, 'sigma_output': sigma.mean()}
-        output_dict = {"loss": nelbo, "log": metrics}
+        elbo = ll - kl
+        loss = - (ll - kl * len_seq)
+        metrics = {'nelbo': - elbo.mean(), 'kl': kl.mean(), 'nll': - ll.mean(),
+                   'sigma_output': sigma.mean()}
+        output_dict = {"loss": loss.mean(), "log": metrics}
         output_dict.update(metrics)  # also include metrics in output dict for access in callbacks
         return output_dict
