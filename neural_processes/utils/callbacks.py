@@ -3,27 +3,17 @@ from pytorch_lightning.callbacks import Callback
 
 from neural_processes.utils.visualisation import plot_test
 
-# c.f. running loss monitoring in torch tutorial:
-# https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
-#  'For running averages you have to implement the logic in training step'
-# https://github.com/PyTorchLightning/pytorch-lightning/issues/488
-# command show_progress_bar=False in Trainer
-
 
 class BaseMetricAccumulator(Callback):
     """Callback that accumulates epoch averages of metrics.
-      (like keras base logger)
+       (like keras base logger)
 
-      N.B. batch_idx is index of batch within epoch; total_batch_idx number of batches overall
+       c.f. running loss monitoring in torch tutorial:
+       https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
+
+      N.B. batch_idx is index of batch within epoch (and what loggers use to trigger updates);
+           total_batch_idx number of batches overall
            global_step is total number of gradient updates -
-           if (self.batch_idx + 1) % self.accumulate_grad_batches == 0:
-                self.global_step += 1
-
-          loggers use trainer.batch_idx when deciding whether to log or not
-          we could use trainer.global_step instead
-
-      Problem:
-      self.callback_metrics.update seems to happen after on_batch_ned?
     """
 
     def on_epoch_start(self, *args, **kwargs):
@@ -38,12 +28,6 @@ class BaseMetricAccumulator(Callback):
 
         for k, v in metrics.items():
             self.totals[k] += v * batch_size
-
-    # This (below) could be used to update logger with epoch-level training running averages
-    # def on_epoch_end(self, trainer, pl_module):
-    #   problem is that this is going to conflict with batch level logs
-    #   metrics = {k: v / self.seen for k, v in self.totals.items()}
-    #   trainer.log_metrics(metrics)
 
 
 class RunningMetricPrinter(BaseMetricAccumulator):
@@ -63,20 +47,11 @@ class RunningMetricPrinter(BaseMetricAccumulator):
         should_log = counter % self.log_freq == 0
 
         if should_log:
-            msg = f"Running average metrics after {counter} steps ({self.attr_monitor})"
-            msg += "\t".join(
+            msg = f"Running averages ({counter} steps):  "
+            msg += "  -  ".join(
                 [f"{k}: {v/self.seen:.3f}" for k, v in self.totals.items()]
             )
             print(msg, flush=True)
-
-
-class RunningMetricCSVLogger(BaseMetricAccumulator):
-    """
-    Save running average training metrics to CSV [not really much point if this
-    isnt integrated with val loss?]
-    """
-
-    pass
 
 
 class CurvePlotter(Callback):
