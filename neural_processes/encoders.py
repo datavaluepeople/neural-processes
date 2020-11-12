@@ -2,21 +2,21 @@ from typing import List
 
 import torch
 
-from neural_processes import base
+from neural_processes import base, attention as attention_modules
 
 
 class Deterministic(torch.nn.Module):
-    def __init__(self, input_size: int, output_sizes: List[int]):
+    def __init__(self, input_size: int, output_sizes: List[int], attention=None):
         super().__init__()
         self.mlp = base.MLP(input_size, output_sizes)
+        self.attention = attention or attention_modules.Uniform()
 
-    def forward(self, x, y):
-        inp = torch.cat([x, y], dim=-1)
+    def forward(self, context_x, context_y, target_x=None):
+        inp = torch.cat([context_x, context_y], dim=-1)
 
         r = self.mlp.forward(inp)
 
-        # Collapse r to a single output per input series
-        return r.mean(dim=1)
+        return self.attention.forward(context_x, r, target_x)
 
 
 class Latent(torch.nn.Module):

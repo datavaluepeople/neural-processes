@@ -54,7 +54,6 @@ class NP(tl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
-        # Could also add learning rate reduction w epoch number via torch.optim.lr_scheduler.StepLR
         return optimizer
 
     def train_dataloader(self):
@@ -79,6 +78,73 @@ class NP(tl.LightningModule):
 
         len_seq = target_x.size()[1]
         kl = torch.distributions.kl_divergence(posterior, prior).sum(dim=-1)
+        ll = dist.log_prob(target_y.squeeze(-1)).sum(dim=-1)
+
+        elbo = ll - kl
+        loss = - (ll - kl * len_seq)
+        metrics = {'nelbo': - elbo.mean(), 'kl': kl.mean(), 'nll': - ll.mean(),
+                   'sigma_output': sigma.mean()}
+        output_dict = {"loss": loss.mean(), "log": metrics}
+        output_dict.update(metrics)  # also include metrics in output dict for access in callbacks
+        return output_dict
+
+
+class ANP(tl.LightningModule):
+    def __init__(
+        self,
+        *,
+        deterministic_encoder,
+        latent_encoder,
+        decoder,
+        train_loader,
+        fixed_sigma=None
+    ):
+        super().__init__()
+        self.deterministic_encoder = deterministic_encoder
+        self.latent_encoder = latent_encoder
+        self.decoder = decoder
+        self.train_loader = train_loader
+        self.fixed_sigma = fixed_sigma
+
+    def forward(self, context_x, context_y, target_x, target_y=None, use_mean_latent=True):
+        # At train time, we infer with both context and targets
+        # (and here target_x/y contains both the context and the targets)
+        if target_y is not None:
+            posterior = self.latent_encoder(target_x, target_y)
+            z = posterior.rsample() if not use_mean_latent else posterior.loc
+        else:
+            prior = self.latent_encoder(context_x, context_y)
+            z = prior.rsample() if not use_mean_latent else prior.loc
+        # Tile a copy of z for every target point
+        z = z.unsqueeze(dim=1).repeat([1, target_x.size()[1], 1])
+        r = self.deterministic_encoder(context_x, context_y, target_x)
+        return self.decoder(target_x, torch.cat([r, z], dim=-1))
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        return optimizer
+
+    def train_dataloader(self):
+        return self.train_loader
+
+    def training_step(self, batch, batch_idx):
+        context_x, context_y, target_x, target_y = batch
+        out = self.forward(
+            context_x, context_y, target_x, target_y=target_y, use_mean_latent=False
+        )
+
+        if self.fixed_sigma is None:
+            mu, sigma = out
+        else:
+            mu, sigma = out, torch.full_like(out, self.fixed_sigma)
+        dist = torch.distributions.Normal(mu, sigma)
+
+        prior = self.latent_encoder.forward(context_x, context_y)
+        posterior = self.latent_encoder.forward(target_x, target_y)
+
+        len_seq = target_x.size()[1]
+        kl = torch.distributions.kl_divergence(posterior, prior).sum(dim=-1)
+
         ll = dist.log_prob(target_y.squeeze(-1)).sum(dim=-1)
 
         elbo = ll - kl

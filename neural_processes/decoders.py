@@ -16,8 +16,10 @@ class Decoder(torch.nn.Module):
     def forward(self, x, r):
         seq_len = x.size()[1]
 
-        # Give each target point a copy of the representation r to decode with
-        inp = torch.cat([x, r.unsqueeze(dim=1).repeat([1, seq_len, 1])], dim=-1)
+        if len(r.size()) == 2:
+            # If we just have one rep per series, give each target point a copy to decode with
+            r = r.unsqueeze(dim=1).repeat([1, seq_len, 1])
+        inp = torch.cat([x, r], dim=-1)
 
         out = self.mlp.forward(inp)
 
