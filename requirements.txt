@@ -25,6 +25,7 @@ google-pasta==0.2.0       # via tensorflow
 grpcio==1.29.0            # via tensorboard, tensorflow
 h5py==2.10.0              # via tensorflow
 idna==2.9                 # via requests
+importlib-metadata==1.7.0  # via jsonschema, markdown
 ipykernel==5.3.0          # via ipywidgets, jupyter, jupyter-console, notebook, qtconsole
 ipython-genutils==0.2.0   # via nbformat, notebook, qtconsole, traitlets
 ipython==7.15.0           # via ipykernel, ipywidgets, jupyter-console
@@ -64,7 +65,7 @@ pygments==2.6.1           # via ipython, jupyter-console, nbconvert, qtconsole
 pyparsing==2.4.7          # via matplotlib, packaging
 pyrsistent==0.16.0        # via jsonschema
 python-dateutil==2.8.1    # via jupyter-client, matplotlib
-pytorch-lightning==0.7.6  # via -r requirements.in
+pytorch-lightning==0.8.5  # via -r requirements.in
 pyyaml==5.3.1             # via pytorch-lightning
 pyzmq==19.0.1             # via jupyter-client, notebook, qtconsole
 qtconsole==4.7.4          # via jupyter
@@ -96,6 +97,7 @@ werkzeug==1.0.1           # via tensorboard
 wheel==0.34.2             # via astunparse, tensorboard, tensorflow
 widgetsnbextension==3.5.1  # via ipywidgets
 wrapt==1.12.1             # via tensorflow
+zipp==3.1.0               # via importlib-metadata
 
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools

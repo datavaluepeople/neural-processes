@@ -1,4 +1,5 @@
 import pytorch_lightning as tl
+from pytorch_lightning.core.decorators import auto_move_data
 import torch
 
 
@@ -9,6 +10,7 @@ class CNP(tl.LightningModule):
         self.decoder = decoder
         self.train_loader = train_loader
 
+    @auto_move_data
     def forward(self, context_x, context_y, target_x):
         r = self.encoder(context_x, context_y)
         mu, sigma = self.decoder(target_x, r)
@@ -38,6 +40,7 @@ class NP(tl.LightningModule):
         self.train_loader = train_loader
         self.fixed_sigma = fixed_sigma
 
+    @auto_move_data
     def forward(self, context_x, context_y, target_x, target_y=None, use_mean_latent=True):
         # At train time, we infer with both context and targets
         # (and here target_x/y contains both the context and the targets)
@@ -64,9 +67,11 @@ class NP(tl.LightningModule):
         )
 
         if self.fixed_sigma is None:
-            mu, sigma = out
+            mu, sigma = out  # each (batch_size, n_targets, 1)
         else:
-            mu, sigma = out, torch.full_like(out, self.fixed_sigma)
+            # decoder outputs only mu (here) or mu and sigma (above) depending on output_sizes
+            mu, sigma = out, torch.full_like(out, self.fixed_sigma)  # (batch_size, n_targets, 1)
+
         dist = torch.distributions.Normal(mu, sigma)
 
         prior = self.encoder.forward(context_x, context_y)
@@ -74,6 +79,12 @@ class NP(tl.LightningModule):
 
         len_seq = target_x.size()[1]
         kl = torch.distributions.kl_divergence(posterior, prior).sum(dim=-1)
+        ll = dist.log_prob(target_y.squeeze(-1)).sum(dim=-1)
 
-        elbo = dist.log_prob(target_y.squeeze(-1)).sum(dim=-1) - kl * len_seq
-        return {"loss": - elbo.mean()}
+        elbo = ll - kl
+        loss = - (ll - kl * len_seq)
+        metrics = {'nelbo': - elbo.mean(), 'kl': kl.mean(), 'nll': - ll.mean(),
+                   'sigma_output': sigma.mean()}
+        output_dict = {"loss": loss.mean(), "log": metrics}
+        output_dict.update(metrics)  # also include metrics in output dict for access in callbacks
+        return output_dict
